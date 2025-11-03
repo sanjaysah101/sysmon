@@ -2,6 +2,10 @@
 
 A zero-dependency, professional-grade system monitoring CLI tool built for hackathons and production environments. Monitor system resources, analyze disk usage, clean temporary files, and benchmark performance—all in under 500 lines of code.
 
+## Demo
+
+[![asciicast](https://asciinema.org/a/753458.svg)](https://asciinema.org/a/753458)
+
 ## Features
 
 - **Real-time Monitoring**: Live CPU, memory, disk, and network monitoring with interactive controls
