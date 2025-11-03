@@ -516,7 +516,8 @@ const main = async () => {
 
   switch (command) {
     case 'monitor': {
-      const exportPath = args.find(a => a.startsWith('--export='))?.split('=')[1];
+      const exportIndex = args.indexOf('--export');
+      const exportPath = exportIndex !== -1 && args[exportIndex + 1] ? args[exportIndex + 1] : null;
       const monitor = new SystemMonitor();
       await monitor.startMonitoring(2000, exportPath);
       break;
