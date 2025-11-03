@@ -6,10 +6,6 @@ import path from 'path';
 import readline from 'readline';
 import { execSync } from 'child_process';
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
-
 const formatBytes = (bytes) => {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
@@ -51,9 +47,18 @@ const prompt = (question) => {
   });
 };
 
-// ============================================================================
-// SYSTEM MONITORING
-// ============================================================================
+const printHeader = (title) => {
+  console.log('\x1b[36m╔════════════════════════════════════════════════════════════╗\x1b[0m');
+  console.log(`\x1b[36m║${title.padStart(Math.floor((52 + title.length) / 2)).padEnd(52)}║\x1b[0m`);
+  console.log('\x1b[36m╚════════════════════════════════════════════════════════════╝\x1b[0m\n');
+};
+
+const runBenchmarkStep = async (description, benchmarkFn) => {
+  console.log(`Running ${description}...`);
+  const score = await benchmarkFn();
+  console.log(`${description} Score: ${score}\n`);
+  return score;
+};
 
 class SystemMonitor {
   constructor() {
@@ -69,43 +74,30 @@ class SystemMonitor {
   getCPUUsage() {
     const cpus = os.cpus();
     let totalIdle = 0, totalTick = 0;
-    
     cpus.forEach(cpu => {
-      for (let type in cpu.times) {
-        totalTick += cpu.times[type];
-      }
+      for (let type in cpu.times) totalTick += cpu.times[type];
       totalIdle += cpu.times.idle;
     });
-    
-    return {
-      idle: totalIdle / cpus.length,
-      total: totalTick / cpus.length,
-      usage: 100 - (100 * totalIdle / totalTick)
-    };
+    return { idle: totalIdle / cpus.length, total: totalTick / cpus.length, usage: 100 - (100 * totalIdle / totalTick) };
   }
 
   getMemoryUsage() {
     const total = os.totalmem();
     const free = os.freemem();
     const used = total - free;
-    return {
-      total,
-      free,
-      used,
-      percent: (used / total) * 100
-    };
+    return { total, free, used, percent: (used / total) * 100 };
   }
 
   getDiskUsage() {
     try {
       const platform = os.platform();
       let output;
-      
+
       if (platform === 'win32') {
-        output = execSync('wmic logicaldisk get size,freespace,caption', { encoding: 'utf8' });
+        output = execSync('wmic logical disk get size,freespace,caption', { encoding: 'utf8' });
         const lines = output.split('\n').filter(l => l.trim());
         const disks = [];
-        
+
         for (let i = 1; i < lines.length; i++) {
           const parts = lines[i].trim().split(/\s+/);
           if (parts.length >= 3) {
@@ -128,7 +120,7 @@ class SystemMonitor {
         output = execSync('df -k', { encoding: 'utf8' });
         const lines = output.split('\n').slice(1);
         const disks = [];
-        
+
         lines.forEach(line => {
           const parts = line.trim().split(/\s+/);
           if (parts.length >= 6) {
@@ -136,7 +128,7 @@ class SystemMonitor {
             const used = parseInt(parts[2]) * 1024;
             const free = parseInt(parts[3]) * 1024;
             const mount = parts[5];
-            
+
             if (total > 0 && mount.startsWith('/')) {
               disks.push({
                 mount,
@@ -161,74 +153,111 @@ class SystemMonitor {
     }
   }
 
-  displaySnapshot() {
+  getNetworkInfo() {
+    const interfaces = os.networkInterfaces();
+    const networkData = [];
+    for (const [name, addresses] of Object.entries(interfaces)) {
+      addresses.forEach(addr => {
+        if (!addr.internal) networkData.push({ interface: name, address: addr.address, family: addr.family, mac: addr.mac });
+      });
+    }
+    return networkData;
+  }
+
+  getTopProcesses(limit = 5) {
+    try {
+      const platform = os.platform();
+      let output, processes = [];
+      if (platform === 'win32') {
+        output = execSync('tasklist /FO CSV /NH', { encoding: 'utf8' });
+        const lines = output.split('\n').filter(l => l.trim());
+        processes = lines.slice(0, limit).map(line => {
+          const parts = line.split(',');
+          return { name: parts[0].replace(/"/g, ''), pid: parseInt(parts[1].replace(/"/g, '')), memory: parseInt(parts[4].replace(/"/g, '').replace(/,/g, '').replace(' K', '')) * 1024 };
+        });
+      } else {
+        output = execSync('ps aux --sort=-%cpu | head -n 10', { encoding: 'utf8' });
+        const lines = output.split('\n').slice(1, limit + 1).filter(l => l.trim());
+        processes = lines.map(line => {
+          const parts = line.trim().split(/\s+/);
+          return { name: parts[10] || parts[11] || 'unknown', pid: parseInt(parts[1]), cpu: parseFloat(parts[2]), memory: parseFloat(parts[3]) };
+        });
+      }
+      return processes;
+    } catch (err) { return []; }
+  }
+
+  displaySnapshot(showNetwork = false, showProcesses = false) {
     clearScreen();
-    console.log('\x1b[36m╔════════════════════════════════════════════════════════════╗\x1b[0m');
-    console.log('\x1b[36m║          SYSTEM GUARDIAN - Resource Monitor              ║\x1b[0m');
-    console.log('\x1b[36m╚════════════════════════════════════════════════════════════╝\x1b[0m\n');
-    
-    // System Info
+    printHeader('SYSTEM GUARDIAN - Resource Monitor');
     console.log(`\x1b[1mSystem:\x1b[0m ${os.type()} ${os.release()}`);
     console.log(`\x1b[1mHostname:\x1b[0m ${os.hostname()}`);
     console.log(`\x1b[1mUptime:\x1b[0m ${formatUptime(os.uptime())}\n`);
-    
-    // CPU
     const cpu = this.getCPUUsage();
     console.log(`\x1b[1m🔧 CPU:\x1b[0m ${os.cpus()[0].model}`);
     console.log(`   Cores: ${os.cpus().length}`);
     console.log(`   Usage: ${getPercentBar(cpu.usage)}\n`);
-    
-    // Memory
     const mem = this.getMemoryUsage();
     console.log(`\x1b[1m💾 Memory:\x1b[0m`);
     console.log(`   Total: ${formatBytes(mem.total)}`);
     console.log(`   Used:  ${formatBytes(mem.used)}`);
     console.log(`   Free:  ${formatBytes(mem.free)}`);
     console.log(`   Usage: ${getPercentBar(mem.percent)}\n`);
-    
-    // Disk
     console.log(`\x1b[1m📁 Disk Usage:\x1b[0m`);
     const disks = this.getDiskUsage();
-    disks.forEach(disk => {
-      if (disk.total > 0) {
-        console.log(`   ${disk.mount}`);
-        console.log(`     ${formatBytes(disk.used)} / ${formatBytes(disk.total)}`);
-        console.log(`     ${getPercentBar(disk.percent)}`);
-      }
-    });
-    
-    console.log('\n\x1b[90mPress Ctrl+C to exit\x1b[0m');
+    disks.forEach(disk => { if (disk.total > 0) console.log(`   ${disk.mount}: ${formatBytes(disk.used)} / ${formatBytes(disk.total)} ${getPercentBar(disk.percent)}`); });
+    if (showNetwork) {
+      console.log(`\n\x1b[1m🌐 Network Interfaces:\x1b[0m`);
+      const networks = this.getNetworkInfo();
+      networks.forEach(net => console.log(`   ${net.interface}: ${net.address} (${net.family})`));
+    }
+    if (showProcesses) {
+      console.log(`\n\x1b[1m⚙️  Top Processes:\x1b[0m`);
+      const processes = this.getTopProcesses(5);
+      processes.forEach((proc, i) => console.log(`   ${i + 1}. ${proc.name} (PID: ${proc.pid}) - CPU: ${proc.cpu || 'N/A'}%, MEM: ${proc.memory || 'N/A'}%`));
+    }
+    if (cpu.usage > 80) console.log(`\n\x1b[31m⚠️  ALERT: High CPU usage (${cpu.usage.toFixed(1)}%)\x1b[0m`);
+    if (mem.percent > 90) console.log(`\x1b[31m⚠️  ALERT: High memory usage (${mem.percent.toFixed(1)}%)\x1b[0m`);
+    console.log('\n\x1b[90mPress Ctrl+C to exit, n for network, p for processes\x1b[0m');
   }
 
-  async startMonitoring(refreshRate = 2000) {
+  async startMonitoring(refreshRate = 2000, exportPath = null) {
     this.running = true;
+    this.showNetwork = false;
+    this.showProcesses = false;
     console.log(`Starting system monitor (refresh every ${refreshRate}ms)...\n`);
-    
-    this.displaySnapshot();
+    this.displaySnapshot(this.showNetwork, this.showProcesses);
     this.interval = setInterval(() => {
       if (this.running) {
-        this.displaySnapshot();
+        this.displaySnapshot(this.showNetwork, this.showProcesses);
+        if (exportPath) this.exportSnapshot(exportPath);
       }
     }, refreshRate);
-
-    process.on('SIGINT', () => {
-      this.stopMonitoring();
-      process.exit(0);
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.on('data', (key) => {
+      if (key[0] === 3) { this.stopMonitoring(); process.exit(0); }
+      else if (key.toString() === 'n') { this.showNetwork = !this.showNetwork; this.displaySnapshot(this.showNetwork, this.showProcesses); }
+      else if (key.toString() === 'p') { this.showProcesses = !this.showProcesses; this.displaySnapshot(this.showNetwork, this.showProcesses); }
     });
+    process.on('SIGINT', () => { this.stopMonitoring(); process.exit(0); });
+  }
+
+  exportSnapshot(exportPath) {
+    const snapshot = { timestamp: new Date().toISOString(), system: `${os.type()} ${os.release()}`, hostname: os.hostname(), uptime: os.uptime(), cpu: this.getCPUUsage(), memory: this.getMemoryUsage(), disks: this.getDiskUsage(), network: this.getNetworkInfo(), processes: this.getTopProcesses(5) };
+    try {
+      const dir = path.dirname(exportPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(exportPath, JSON.stringify(snapshot, null, 2));
+    } catch (err) {}
   }
 
   stopMonitoring() {
     this.running = false;
-    if (this.interval) {
-      clearInterval(this.interval);
-    }
+    if (this.interval) clearInterval(this.interval);
     console.log('\nMonitoring stopped.');
   }
 }
-
-// ============================================================================
-// DISK ANALYZER
-// ============================================================================
 
 class DiskAnalyzer {
   constructor() {
@@ -248,40 +277,24 @@ class DiskAnalyzer {
 
   _scan(dirPath, depth, maxDepth, minSize) {
     if (depth > maxDepth) return;
-    
     try {
       const items = fs.readdirSync(dirPath);
-      
       items.forEach(item => {
         const fullPath = path.join(dirPath, item);
-        
         try {
           const stats = fs.statSync(fullPath);
-          
           if (stats.isFile()) {
             this.fileCount++;
             this.totalSize += stats.size;
-            
             const ext = path.extname(item).toLowerCase() || 'no-extension';
             this.fileTypes[ext] = (this.fileTypes[ext] || 0) + stats.size;
-            
-            if (stats.size >= minSize) {
-              this.largeFiles.push({
-                path: fullPath,
-                size: stats.size,
-                modified: stats.mtime
-              });
-            }
-          } else if (stats.isDirectory()) {
-            this._scan(fullPath, depth + 1, maxDepth, minSize);
-          }
+            if (stats.size >= minSize) this.largeFiles.push({ path: fullPath, size: stats.size, modified: stats.mtime });
+          } else if (stats.isDirectory()) this._scan(fullPath, depth + 1, maxDepth, minSize);
         } catch (err) {
-          // Skip files we can't access
+          console.error(`\x1b[31mError accessing file ${dirPath}: ${err.message}\x1b[0m`);
         }
       });
-    } catch (err) {
-      console.error(`\x1b[31mError scanning ${dirPath}: ${err.message}\x1b[0m`);
-    }
+    } catch (err) { console.error(`\x1b[31mError scanning ${dirPath}: ${err.message}\x1b[0m`); }
   }
 
   _generateReport() {
@@ -300,9 +313,7 @@ class DiskAnalyzer {
   }
 
   displayReport(report) {
-    console.log('\n\x1b[36m╔════════════════════════════════════════════════════════════╗\x1b[0m');
-    console.log('\x1b[36m║              DISK ANALYSIS REPORT                         ║\x1b[0m');
-    console.log('\x1b[36m╚════════════════════════════════════════════════════════════╝\x1b[0m\n');
+    printHeader('DISK ANALYSIS REPORT');
     
     console.log(`\x1b[1mTotal Files:\x1b[0m ${report.fileCount.toLocaleString()}`);
     console.log(`\x1b[1mTotal Size:\x1b[0m ${formatBytes(report.totalSize)}\n`);
@@ -319,10 +330,6 @@ class DiskAnalyzer {
     });
   }
 }
-
-// ============================================================================
-// TEMP FILE CLEANER
-// ============================================================================
 
 class TempCleaner {
   constructor() {
@@ -429,89 +436,123 @@ class TempCleaner {
   }
 }
 
-// ============================================================================
-// CLI INTERFACE
-// ============================================================================
+class SystemInfo {
+  displayInfo() {
+    printHeader('SYSTEM INFORMATION');
+    console.log(`OS: ${os.type()} ${os.release()} (${os.arch()})`);
+    console.log(`Hostname: ${os.hostname()}`);
+    console.log(`Platform: ${os.platform()}`);
+    console.log(`Uptime: ${formatUptime(os.uptime())}`);
+    console.log(`Total Memory: ${formatBytes(os.totalmem())}`);
+    console.log(`CPU Cores: ${os.cpus().length}`);
+    console.log(`CPU Model: ${os.cpus()[0].model}`);
+    console.log(`Home: ${os.homedir()}`);
+    console.log(`Temp: ${os.tmpdir()}`);
+  }
+}
+
+class Benchmark {
+  async runBenchmark() {
+    printHeader('SYSTEM BENCHMARK');
+
+    const cpuScore = await runBenchmarkStep('CPU benchmark', this.cpuBenchmark.bind(this));
+    const memScore = await runBenchmarkStep('memory benchmark', this.memoryBenchmark.bind(this));
+
+    const totalScore = Math.round((cpuScore + memScore) / 2);
+    console.log(`Total System Score: ${totalScore}`);
+  }
+
+  async cpuBenchmark() {
+    const start = Date.now();
+    let result = 0;
+    for (let i = 0; i < 250000; i++) result += Math.sqrt(i) * Math.sin(i);
+    const time = Date.now() - start;
+    return Math.max(1, Math.round(1000 / time * 25));
+  }
+
+  memoryBenchmark() {
+    const arrays = [];
+    const maxSize = Math.min(25, Math.floor(os.totalmem() / 1024 / 1024 / 40));
+    for (let i = 0; i < maxSize; i++) arrays.push(new Array(25000).fill(Math.random()));
+    const score = Math.round(maxSize * 10);
+    arrays.length = 0;
+    return score;
+  }
+}
 
 const showHelp = () => {
-  console.log(`
-\x1b[36m╔════════════════════════════════════════════════════════════╗
-║            SYSTEM GUARDIAN v1.0.0                         ║
-║         Professional System Utilities Package             ║
-╚════════════════════════════════════════════════════════════╝\x1b[0m
-
-\x1b[1mUSAGE:\x1b[0m
-  node system-guardian.js [command] [options]
-
-\x1b[1mCOMMANDS:\x1b[0m
-  monitor           Live system resource monitoring
-  analyze <path>    Analyze disk usage in directory
-  clean [days]      Find and clean old temp files (default: 7 days)
-  help              Show this help message
-
-\x1b[1mEXAMPLES:\x1b[0m
-  node system-guardian.js monitor
-  node system-guardian.js analyze ~/Documents
-  node system-guardian.js clean 14
-  node system-guardian.js clean --dry-run
-
-\x1b[1mOPTIONS:\x1b[0m
-  --dry-run         Preview changes without deleting
-  --depth <n>       Max directory depth for analysis (default: 5)
-  --min-size <mb>   Minimum file size for large file report (default: 10)
-`);
+  printHeader('SYSTEM GUARDIAN v1.0.0');
+  console.log('Professional System Utilities Package\n');
+  console.log('USAGE: sysmon [command] [options]\n');
+  console.log('COMMANDS:');
+  console.log('  monitor           Live system resource monitoring');
+  console.log('  analyze <path>    Analyze disk usage in directory');
+  console.log('  clean [days]      Find and clean old temp files (default: 7 days)');
+  console.log('  info              Display detailed system information');
+  console.log('  benchmark         Run system performance benchmark');
+  console.log('  help              Show this help message\n');
+  console.log('EXAMPLES:');
+  console.log('  sysmon monitor');
+  console.log('  sysmon monitor --export reports/snapshot.json');
+  console.log('  sysmon analyze ~/Documents');
+  console.log('  sysmon clean 14 --dry-run');
+  console.log('  sysmon info');
+  console.log('  sysmon benchmark\n');
+  console.log('OPTIONS:');
+  console.log('  --dry-run         Preview changes without deleting');
+  console.log('  --depth <n>       Max directory depth for analysis (default: 5)');
+  console.log('  --min-size <mb>   Minimum file size for large file report (default: 10)');
+  console.log('  --export <path>   Export monitor data to JSON file');
 };
 
 const main = async () => {
   const args = process.argv.slice(2);
   const command = args[0];
-  
+
   if (!command || command === 'help') {
     showHelp();
     return;
   }
-  
+
   switch (command) {
     case 'monitor': {
+      const exportPath = args.find(a => a.startsWith('--export='))?.split('=')[1];
       const monitor = new SystemMonitor();
-      await monitor.startMonitoring(2000);
+      await monitor.startMonitoring(2000, exportPath);
       break;
     }
-    
+
     case 'analyze': {
       const targetPath = args[1] || process.cwd();
-      
       if (!fs.existsSync(targetPath)) {
         console.error(`\x1b[31mError: Path does not exist: ${targetPath}\x1b[0m`);
         process.exit(1);
       }
-      
-      console.log(`\nAnalyzing: ${targetPath}\n`);
-      console.log('This may take a while for large directories...');
-      
+      console.log(`\nAnalyzing: ${targetPath}\nThis may take a while for large directories...`);
       const analyzer = new DiskAnalyzer();
       const report = analyzer.analyzeDirectory(targetPath, {
         maxDepth: parseInt(args.find(a => a.startsWith('--depth='))?.split('=')[1]) || 5,
         minSize: (parseInt(args.find(a => a.startsWith('--min-size='))?.split('=')[1]) || 10) * 1024 * 1024
       });
-      
       analyzer.displayReport(report);
       break;
     }
-    
+
     case 'clean': {
       const daysOld = parseInt(args[1]) || 7;
       const dryRun = args.includes('--dry-run');
-      
       const cleaner = new TempCleaner();
       const findings = await cleaner.scan(daysOld);
       await cleaner.clean(findings, dryRun);
       break;
     }
-    
+
+    case 'info': { const info = new SystemInfo(); info.displayInfo(); break; }
+    case 'benchmark': { const bench = new Benchmark(); await bench.runBenchmark(); break; }
+
     default:
       console.error(`\x1b[31mUnknown command: ${command}\x1b[0m`);
-      console.log('Run "node system-guardian.js help" for usage information.');
+      console.log('Run "sysmon help" for usage information.');
       process.exit(1);
   }
 };

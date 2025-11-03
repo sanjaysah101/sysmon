@@ -4,13 +4,13 @@ const maxLine = 500;
 function countExecutableLines(filePath) {
   const content = readFileSync(filePath, 'utf8');
   const lines = content.split('\n');
-  
+
   let count = 0;
   let inMultilineComment = false;
-  
+
   for (let line of lines) {
     const trimmed = line.trim();
-    
+
     // Handle multiline comments
     if (trimmed.startsWith('/*')) {
       inMultilineComment = true;
@@ -22,15 +22,15 @@ function countExecutableLines(filePath) {
     if (inMultilineComment) {
       continue;
     }
-    
+
     // Skip empty lines and comments
     if (trimmed === '' || trimmed.startsWith('//')) {
       continue;
     }
-    
+
     count++;
   }
-  
+
   return count;
 }
 
