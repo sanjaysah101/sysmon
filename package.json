@@ -1,0 +1,20 @@
+{
+  "name": "@ansospace/sysmon",
+  "version": "1.0.0",
+  "description": "A zero-dependency system monitoring CLI tool for listing system info, real-time monitoring, and cleanup tasks.",
+  "main": "bin/cli.js",
+   "type": "module",
+  "bin": {
+    "sysmon": "bin/cli.js"
+  },
+  "scripts": {
+    "start": "node bin/cli.js",
+    "prepublishOnly": "node scripts/count-lines.js"
+  },
+  "keywords": ["cli", "system", "monitoring", "utilities"],
+  "author": "Sanjay Kumar Sah",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
