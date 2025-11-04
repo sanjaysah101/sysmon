@@ -1,6 +1,6 @@
 {
   "name": "@ansospace/sysmon",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A zero-dependency system monitoring CLI tool for listing system info, real-time monitoring, and cleanup tasks.",
   "main": "bin/cli.js",
   "type": "module",

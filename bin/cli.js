@@ -249,7 +249,9 @@ class SystemMonitor {
       const dir = path.dirname(exportPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(exportPath, JSON.stringify(snapshot, null, 2));
-    } catch (err) {}
+    } catch (err) {
+      console.error(`Error exporting snapshot: ${err.message}`);
+    }
   }
 
   stopMonitoring() {
@@ -369,9 +371,7 @@ class TempCleaner {
                 isDirectory: stats.isDirectory()
               });
             }
-          } catch (err) {
-            // Skip inaccessible files
-          }
+          } catch (err) {}
         }
       } catch (err) {
         console.log(`  \x1b[33m⚠ Cannot access: ${err.message}\x1b[0m`);

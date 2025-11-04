@@ -1,10 +1,24 @@
 # System Guardian 🛡️
 
-A zero-dependency, professional-grade system monitoring CLI tool built for hackathons and production environments. Monitor system resources, analyze disk usage, clean temporary files, and benchmark performance—all in under 500 lines of code.
+> **A system utilities project built for Code Olympics hackathon with professional builder limit while following the no-import rookie constraint**
+
+[![Lines](https://img.shields.io/badge/Lines-500%2F500-success)](.) [![No Imports](https://img.shields.io/badge/No%20Imports-Allowed-success)](.) [![Single File](https://img.shields.io/badge/Single%20File-CLI-orange)](.)
+
+A zero-dependency system monitoring CLI tool built for the Code Olympics hackathon. Monitor system resources, analyze disk usage, clean temporary files, and benchmark performance—all in under 500 lines of code using only built-in Node.js functions.
 
 ## Demo
 
 [![asciicast](https://asciinema.org/a/753458.svg)](https://asciinema.org/a/753458)
+
+## 🎯 Challenge
+
+**Code Olympics Challenge:** "Create a system utilities project with the professional builder limit while following the no-import rookie constraint."
+
+- **No-Import Rookie:** Only built-in functions, no external libraries
+- **Professional Builders:** Maximum 500 lines of code
+- **System Utilities:** Monitors, cleaners, automation tools
+
+![Code Olympics Challenge](code-olympics-challenge.png)
 
 ## Features
 
@@ -102,6 +116,19 @@ This project maintains a strict 500-line limit for the main CLI file (`bin/cli.j
 
 ```bash
 npm run prepublishOnly
+```
+
+### Line Count Verification
+
+```bash
+node scripts/count-lines.js
+```
+
+Output:
+
+```bash
+📊 Line Count: 500 / 500
+✅ Perfect! Exactly 500 lines.
 ```
 
 ### Project Structure
